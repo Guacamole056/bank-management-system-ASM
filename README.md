@@ -6,13 +6,14 @@ This is a simplified x86 assembly conversion of the C bank management system.
 COMPILATION INSTRUCTIONS:
 -------------------------
 1. Make sure you have MASM and the Irvine32 library installed
-2. Update the path in build.bat to point to your Irvine library location
-3. Run: build.bat
+2. Update the path in ```build.bat``` to point to your Irvine library location
+3. Run: ```build.bat```
 
-Or manually:
-  ml /c /I"C:\Irvine" bank_system.asm
-  link /SUBSYSTEM:CONSOLE bank_system.obj Irvine32.lib kernel32.lib user32.lib
-
+Or manually:  
+```
+ml /c /I"C:\Irvine" bank_system.asm  
+link /SUBSYSTEM:CONSOLE bank_system.obj Irvine32.lib kernel32.lib user32.lib
+```
 FEATURES:
 ---------
 - User authentication (login, create account)
@@ -24,7 +25,7 @@ FEATURES:
 
 DEFAULT ADMIN ACCOUNT:
 ----------------------
-Username: admin
+Username: admin  
 Password: admin
 
 NOTE:
