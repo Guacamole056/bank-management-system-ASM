@@ -1,0 +1,34 @@
+MANUAL BUILD INSTRUCTIONS
+==========================
+
+If build.bat doesn't work, follow these steps:
+
+STEP 1: Open Developer Command Prompt
+--------------------------------------
+1. Press Windows Key
+2. Type: "Developer Command Prompt"
+3. Click: "Developer Command Prompt for VS" (or any VS version)
+
+STEP 2: Navigate to Project Folder
+------------------------------------
+cd "C:\Users\anasa\OneDrive\Documents\C\PF-Project"
+
+STEP 3: Compile
+---------------
+ml /c /I"C:\Irvine" bank_system.asm
+
+(If Irvine32 is in a different location, update the path)
+
+STEP 4: Link
+------------
+link /SUBSYSTEM:CONSOLE bank_system.obj Irvine32.lib kernel32.lib user32.lib
+
+STEP 5: Run
+-----------
+bank_system.exe
+
+ALTERNATIVE: If you don't have Visual Studio
+--------------------------------------------
+1. Install Visual Studio Community (free)
+2. Select "Desktop development with C++" during installation
+3. Then follow steps above
