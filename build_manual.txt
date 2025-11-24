@@ -11,7 +11,7 @@ STEP 1: Open Developer Command Prompt
 
 STEP 2: Navigate to Project Folder
 ------------------------------------
-cd "C:\Users\anasa\OneDrive\Documents\C\PF-Project"
+cd "C:\Users\anasa\OneDrive\Documents\COAL\"
 
 STEP 3: Compile
 ---------------
@@ -21,7 +21,7 @@ ml /c /I"C:\Irvine" bank_system.asm
 
 STEP 4: Link
 ------------
-link /SUBSYSTEM:CONSOLE bank_system.obj Irvine32.lib kernel32.lib user32.lib
+link /SUBSYSTEM:CONSOLE bank_system.obj Irvine32.lib kernel32.lib user32.lib ^ /LIBPATH:"C:\Irvine" 
 
 STEP 5: Run
 -----------
