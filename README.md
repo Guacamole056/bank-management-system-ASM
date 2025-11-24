@@ -33,4 +33,3 @@ NOTE:
 - File I/O has been excluded for simplicity
 - All data is stored in memory (lost on exit)
 - Uses integer arithmetic instead of floating point
-- Simplified for school project requirements
