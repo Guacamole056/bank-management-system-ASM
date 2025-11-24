@@ -26,9 +26,3 @@ link /SUBSYSTEM:CONSOLE bank_system.obj Irvine32.lib kernel32.lib user32.lib
 STEP 5: Run
 -----------
 bank_system.exe
-
-ALTERNATIVE: If you don't have Visual Studio
---------------------------------------------
-1. Install Visual Studio Community (free)
-2. Select "Desktop development with C++" during installation
-3. Then follow steps above
