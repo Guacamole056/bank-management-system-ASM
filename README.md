@@ -11,7 +11,9 @@ COMPILATION INSTRUCTIONS:
 
 Or manually:  
 ```
-ml /c /I"C:\Irvine" bank_system.asm  
+ml /c /I"C:\Irvine" bank_system.asm
+```
+```
 link /SUBSYSTEM:CONSOLE bank_system.obj Irvine32.lib kernel32.lib user32.lib ^ /LIBPATH:"C:\Irvine"
 ```
 FEATURES:
