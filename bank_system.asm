@@ -1,6 +1,5 @@
 ; ============================================================
 ; Bank Management System - x86 Assembly
-; File I/O excluded for simplicity
 ; ============================================================
 
 INCLUDE Irvine32.inc
@@ -10,14 +9,14 @@ MAX_USERS = 100
 USERNAME_LENGTH = 30
 PASSWORD_LENGTH = 30
 MAX_ACCOUNTS = 100
-ACCOUNT_STRUCT_SIZE = 4 + 50 + 4 + 4 + 30  ; accountNumber + name + balance + loyaltyPoints + ownerUsername
+ACCOUNT_STRUCT_SIZE = 4 + 50 + 4 + 30  ; accountNumber + name + balance + ownerUsername
 USER_STRUCT_SIZE = 30 + 30 + 4  ; username + password + isAdmin
 
 .data
 ; User structure: username[30], password[30], isAdmin[4]
 users BYTE MAX_USERS * USER_STRUCT_SIZE DUP(0)
 
-; Account structure: accountNumber[4], name[50], balance[4], loyaltyPoints[4], ownerUsername[30]
+; Account structure: accountNumber[4], name[50], balance[4], ownerUsername[30]
 accounts BYTE MAX_ACCOUNTS * ACCOUNT_STRUCT_SIZE DUP(0)
 
 userCount DWORD 0
@@ -103,11 +102,12 @@ strAccountDeleted BYTE "Account deleted successfully.", 0Ah, 0Dh, 0
 strAccountUpdated BYTE "Account updated.", 0Ah, 0Dh, 0
 strMaxUsers BYTE "Maximum users reached.", 0Ah, 0Dh, 0
 strMaxAccounts BYTE "Maximum accounts reached.", 0Ah, 0Dh, 0
+strSameAccount BYTE "Sender and receiver must be different accounts.", 0Ah, 0Dh, 0
+strSenderMismatch BYTE "You can only transfer from your own account.", 0Ah, 0Dh, 0
 
 strAccountNum BYTE "Account Number: ", 0
 strName BYTE "Name: ", 0
 strBalance BYTE "Balance: $", 0
-strLoyaltyPoints BYTE "Loyalty Points: ", 0
 strOwner BYTE "Owner: ", 0
 strUsername BYTE "Username: ", 0
 strHasAccount BYTE "Has Account: ", 0
@@ -119,6 +119,11 @@ tempUsername BYTE USERNAME_LENGTH DUP(0)
 tempPassword BYTE PASSWORD_LENGTH DUP(0)
 tempName BYTE 50 DUP(0)
 tempBuffer BYTE 100 DUP(0)
+senderAccountNum DWORD 0
+receiverAccountNum DWORD 0
+transferAmount DWORD 0
+senderAccountPtr DWORD 0
+receiverAccountPtr DWORD 0
 
 .code
 main PROC
@@ -397,6 +402,18 @@ Login PROC
     mov ecx, USERNAME_LENGTH
     call ReadString
     call Crlf
+    
+    ; Ensure username exists before asking for password
+    call CheckUsernameExists
+    cmp eax, 1
+    je UsernameValid
+    mov edx, OFFSET strAccountNotFound
+    call WriteString
+    call WaitMsg
+    popad
+    ret
+    
+    UsernameValid:
     
     ; Get password
     mov edx, OFFSET strEnterPassword
@@ -735,15 +752,6 @@ AddAccount PROC
     mov [edi], ebx
     add edi, 4
     
-    ; Calculate and store loyalty points (balance * 10 / 100)
-    mov eax, ebx
-    mov ecx, 10
-    mul ecx
-    mov ecx, 100
-    div ecx
-    mov [edi], eax
-    add edi, 4
-    
     ; Store owner username
     mov esi, OFFSET tempUsername
     mov ecx, USERNAME_LENGTH
@@ -805,15 +813,6 @@ ViewAccounts PROC
         mov eax, [esi]
         call WriteInt
         call Crlf
-        
-        ; Display loyalty points
-        add esi, 4
-        mov edx, OFFSET strLoyaltyPoints
-        call WriteString
-        mov eax, [esi]
-        call WriteInt
-        call Crlf
-        
         call Crlf
         
         pop esi
@@ -878,13 +877,6 @@ ViewAccountDetails PROC
     
     add esi, 50
     mov edx, OFFSET strBalance
-    call WriteString
-    mov eax, [esi]
-    call WriteInt
-    call Crlf
-    
-    add esi, 4
-    mov edx, OFFSET strLoyaltyPoints
     call WriteString
     mov eax, [esi]
     call WriteInt
@@ -1007,6 +999,29 @@ DebitAccount PROC
     mov ebx, eax  ; Account number
     call Crlf
     
+    ; Validate account before asking amount
+    mov esi, OFFSET accounts
+    mov ecx, accountCount
+    cmp ecx, 0
+    je NoAccountsDebit
+    
+    FindDebitAcct:
+        mov eax, [esi]
+        cmp eax, ebx
+        je DebitAcctFound
+        add esi, ACCOUNT_STRUCT_SIZE
+        dec ecx
+        jnz FindDebitAcct
+    
+    mov edx, OFFSET strAccountNotFound
+    call WriteString
+    call WaitMsg
+    popad
+    ret
+    
+    DebitAcctFound:
+    mov edi, esi  ; Preserve pointer for later
+    
     mov edx, OFFSET strEnterAmount
     call WriteString
     call ReadInt
@@ -1016,25 +1031,8 @@ DebitAccount PROC
     cmp ecx, 0
     jle InvalidAmt
     
-    ; Find account
-    mov esi, OFFSET accounts
-    mov edx, accountCount
-    
-    FindLoop:
-        cmp [esi], ebx
-        je Found
-        add esi, ACCOUNT_STRUCT_SIZE
-        dec edx
-        jnz FindLoop
-    
-    mov edx, OFFSET strAccountNotFound
-    call WriteString
-    call WaitMsg
-    popad
-    ret
-    
-    Found:
     ; Check balance
+    mov esi, edi
     add esi, 54  ; Skip to balance
     mov eax, [esi]
     cmp eax, ecx
@@ -1042,16 +1040,6 @@ DebitAccount PROC
     
     ; Debit
     sub eax, ecx
-    mov [esi], eax
-    
-    ; Update loyalty points
-    add esi, 4
-    mov ebx, eax
-    mov eax, ebx
-    mov edx, 10
-    mul edx
-    mov edx, 100
-    div edx
     mov [esi], eax
     
     mov edx, OFFSET strDebitSuccess
@@ -1062,6 +1050,13 @@ DebitAccount PROC
     
     Insufficient:
     mov edx, OFFSET strInsufficientBalance
+    call WriteString
+    call WaitMsg
+    popad
+    ret
+    
+    NoAccountsDebit:
+    mov edx, OFFSET strNoAccounts
     call WriteString
     call WaitMsg
     popad
@@ -1086,6 +1081,29 @@ CreditAccount PROC
     mov ebx, eax
     call Crlf
     
+    ; Validate account before asking amount
+    mov esi, OFFSET accounts
+    mov ecx, accountCount
+    cmp ecx, 0
+    je NoAccountsCredit
+    
+    FindCreditAccount:
+        mov eax, [esi]
+        cmp eax, ebx
+        je CreditAccountFound
+        add esi, ACCOUNT_STRUCT_SIZE
+        dec ecx
+        jnz FindCreditAccount
+    
+    mov edx, OFFSET strAccountNotFound
+    call WriteString
+    call WaitMsg
+    popad
+    ret
+    
+    CreditAccountFound:
+    mov edi, esi
+    
     mov edx, OFFSET strEnterAmount
     call WriteString
     call ReadInt
@@ -1095,41 +1113,19 @@ CreditAccount PROC
     cmp ecx, 0
     jle InvalidAmt
     
-    ; Find account
-    mov esi, OFFSET accounts
-    mov edx, accountCount
+    add edi, 54  ; Skip to balance
+    mov eax, [edi]
+    add eax, ecx
+    mov [edi], eax
     
-    FindLoop:
-        cmp [esi], ebx
-        je Found
-        add esi, ACCOUNT_STRUCT_SIZE
-        dec edx
-        jnz FindLoop
-    
-    mov edx, OFFSET strAccountNotFound
+    mov edx, OFFSET strCreditSuccess
     call WriteString
     call WaitMsg
     popad
     ret
     
-    Found:
-    ; Credit
-    add esi, 54  ; Skip to balance
-    mov eax, [esi]
-    add eax, ecx
-    mov [esi], eax
-    
-    ; Update loyalty points
-    add esi, 4
-    mov ebx, eax
-    mov eax, ebx
-    mov edx, 10
-    mul edx
-    mov edx, 100
-    div edx
-    mov [esi], eax
-    
-    mov edx, OFFSET strCreditSuccess
+    NoAccountsCredit:
+    mov edx, OFFSET strNoAccounts
     call WriteString
     call WaitMsg
     popad
@@ -1148,63 +1144,106 @@ FundTransfer PROC
     pushad
     
     call Clrscr
+    
+    ; Ensure there are accounts to search before prompting
+    mov ecx, accountCount
+    cmp ecx, 0
+    je NoAccountsTransfer
+    
+    ; Get sender account number
     mov edx, OFFSET strEnterSender
     call WriteString
     call ReadInt
-    mov ebx, eax  ; Sender account
+    mov senderAccountNum, eax
     call Crlf
     
+    ; Validate sender account immediately
+    mov esi, OFFSET accounts
+    mov ecx, accountCount
+    mov eax, senderAccountNum
+    
+    ValidateSenderLoop:
+        mov edx, [esi]
+        cmp edx, eax
+        je SenderLocated
+        add esi, ACCOUNT_STRUCT_SIZE
+        dec ecx
+        jnz ValidateSenderLoop
+        jmp AccountNotFoundMsg
+    
+    SenderLocated:
+    mov senderAccountPtr, esi
+    mov esi, senderAccountPtr
+    add esi, 58
+    mov edi, OFFSET currentUsername
+    call StrCompareOwner
+    cmp eax, 1
+    jne SenderMismatch
+    
+    ; Get receiver account number
     mov edx, OFFSET strEnterReceiver
     call WriteString
     call ReadInt
-    mov edx, eax  ; Receiver account
+    mov receiverAccountNum, eax
+    cmp eax, senderAccountNum
+    je SameAccountError
     call Crlf
     
+    ; Validate receiver account immediately
+    mov esi, OFFSET accounts
+    mov ecx, accountCount
+    mov eax, receiverAccountNum
+    
+    ValidateReceiverLoop:
+        mov edx, [esi]
+        cmp edx, eax
+        je ReceiverLocated
+        add esi, ACCOUNT_STRUCT_SIZE
+        dec ecx
+        jnz ValidateReceiverLoop
+        jmp AccountNotFoundMsg
+    
+    ReceiverLocated:
+    mov receiverAccountPtr, esi
+    
+    ; Get transfer amount
     mov edx, OFFSET strEnterAmount
     call WriteString
     call ReadInt
-    mov ecx, eax  ; Amount
+    mov transferAmount, eax
     call Crlf
     
-    cmp ecx, 0
+    mov eax, transferAmount
+    cmp eax, 0
     jle InvalidAmt
     
-    ; Find sender account
-    mov esi, OFFSET accounts
-    mov eax, accountCount
-    mov edi, 0  ; Sender pointer
-    mov ebp, 0  ; Receiver pointer
+    mov ecx, transferAmount
+    mov edi, senderAccountPtr
+    mov ebp, receiverAccountPtr
+    jmp CheckBalance
     
-    FindSender:
-        cmp [esi], ebx
-        jne NextSender
-        mov edi, esi
-        jmp FindReceiver
-        NextSender:
-        add esi, ACCOUNT_STRUCT_SIZE
-        dec eax
-        jnz FindSender
-    
-    mov edx, OFFSET strAccountNotFound
+    SameAccountError:
+    mov edx, OFFSET strSameAccount
     call WriteString
     call WaitMsg
     popad
     ret
-    
-    FindReceiver:
-    mov esi, OFFSET accounts
-    mov eax, accountCount
-    
-    FindRecv:
-        cmp [esi], edx
-        jne NextRecv
-        mov ebp, esi
-        jmp CheckBalance
-        NextRecv:
-        add esi, ACCOUNT_STRUCT_SIZE
-        dec eax
-        jnz FindRecv
-    
+
+    SenderMismatch:
+    mov edx, OFFSET strSenderMismatch
+    call WriteString
+    call WaitMsg
+    popad
+    ret
+
+    NoAccountsTransfer:
+    mov edx, OFFSET strNoAccounts
+    call WriteString
+    call WaitMsg
+    popad
+    ret
+
+    AccountNotFoundMsg:
     mov edx, OFFSET strAccountNotFound
     call WriteString
     call WaitMsg
@@ -1223,31 +1262,11 @@ FundTransfer PROC
     sub eax, ecx
     mov [esi], eax
     
-    ; Update sender loyalty points
-    add esi, 4
-    mov ebx, eax
-    mov eax, ebx
-    mov edx, 10
-    mul edx
-    mov edx, 100
-    div edx
-    mov [esi], eax
-    
     ; Update receiver balance
     mov esi, ebp
     add esi, 54
     mov eax, [esi]
     add eax, ecx
-    mov [esi], eax
-    
-    ; Update receiver loyalty points
-    add esi, 4
-    mov ebx, eax
-    mov eax, ebx
-    mov edx, 10
-    mul edx
-    mov edx, 100
-    div edx
     mov [esi], eax
     
     mov edx, OFFSET strTransferSuccess
@@ -1280,11 +1299,13 @@ BalanceInquiry PROC
     mov ecx, accountCount
     mov edi, OFFSET currentUsername
     mov ebx, 0  ; Found flag
+    cmp ecx, 0
+    je NoAccounts
     
     SearchLoop:
         push esi
         push edi
-        add esi, 88  ; Skip to owner username
+        add esi, 58  ; Skip to owner username (4+50+4)
         mov edi, OFFSET currentUsername
         push ecx
         call StrCompareOwner
@@ -1298,6 +1319,8 @@ BalanceInquiry PROC
     
     cmp ebx, 0
     jne Done
+
+    NoAccounts:
     mov edx, OFFSET strNoAccounts
     call WriteString
     
@@ -1326,13 +1349,6 @@ BalanceInquiry PROC
     
     add esi, 50
     mov edx, OFFSET strBalance
-    call WriteString
-    mov eax, [esi]
-    call WriteInt
-    call Crlf
-    
-    add esi, 4
-    mov edx, OFFSET strLoyaltyPoints
     call WriteString
     mov eax, [esi]
     call WriteInt
@@ -1456,7 +1472,7 @@ CheckUserHasAccount PROC
     
     CheckLoop:
         push edi
-        add edi, 88  ; Skip to owner username
+        add edi, 58  ; Skip to owner username (4+50+4)
         mov esi, OFFSET tempBuffer
         push ecx
         call StrCompareOwner
